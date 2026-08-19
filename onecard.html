@@ -652,70 +652,29 @@ body.game-onecard #chatPane.hidden {
   box-shadow: 0 0 0 4px rgba(79,123,216,.15),0 8px 20px rgba(24,37,63,.2);
 }
 .oc-order-card.revealed {
-  display: flex;
-  min-height: 0;
-  padding: 8px 6px 7px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 7px;
+  display: grid;
+  place-items: center;
   background: #fff;
   color: #283247;
   border-color: #cdd7e6;
   opacity: 1;
-  cursor: default;
-  animation: ocOrderFlipIn .34s ease both;
 }
-.oc-order-card.revealed::after { content: none; }
-.oc-order-card-face {
-  width: 100%;
-  display: flex;
-  justify-content: center;
+.oc-order-card.revealed::after {
+  content: none;
 }
-.oc-order-card.revealed .oc-card {
-  width: min(88px, 100%);
-  height: 122px;
-  border-radius: 8px;
-  box-shadow: 0 5px 12px rgba(29,42,67,.14);
-  pointer-events: none;
+.oc-order-card.revealed b {
+  font: 700 17px var(--f-mono);
 }
-.oc-order-card.revealed .oc-card-corner {
-  top: 6px;
-  left: 7px;
-  font-size: 14px;
-}
-.oc-order-card.revealed .oc-card-corner.bottom {
-  top: auto;
-  left: auto;
-  right: 7px;
-  bottom: 6px;
-}
-.oc-order-card.revealed .oc-card-suit { font-size: 12px; }
-.oc-order-card.revealed .oc-card-center { font-size: 38px; }
-.oc-order-card.revealed .oc-card-center.joker {
-  padding: 18px 7px;
-  font-size: 12px;
-}
-.oc-order-card.revealed .oc-card-effect {
-  bottom: 13px;
-  padding: 2px 4px;
-  font-size: 7px;
-}
-.oc-order-owner {
+.oc-order-card.revealed small {
   display: block;
+  margin-top: 5px;
   color: #738095;
   font-size: 9px;
-  line-height: 1.25;
-  text-align: center;
 }
 .oc-order-card.starter {
   border-color: #3e78dc;
   background: #edf4ff;
   box-shadow: 0 0 0 4px rgba(62,120,220,.16);
-}
-@keyframes ocOrderFlipIn {
-  0% { transform: rotateY(90deg) scale(.96); opacity: .2; }
-  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
 }
 .oc-order-card.taken:not(.revealed)::before {
   content: '선택됨';
@@ -770,33 +729,9 @@ body.game-onecard #chatPane.hidden {
   .oc-order-card {
     min-height: 88px;
   }
-  .oc-order-card.revealed .oc-card {
-    width: min(62px, 100%);
-    height: 86px;
+  .oc-order-card.revealed b {
+    font-size: 13px;
   }
-  .oc-order-card.revealed .oc-card-corner {
-    top: 4px;
-    left: 5px;
-    font-size: 10px;
-  }
-  .oc-order-card.revealed .oc-card-corner.bottom {
-    top: auto;
-    left: auto;
-    right: 5px;
-    bottom: 4px;
-  }
-  .oc-order-card.revealed .oc-card-suit { font-size: 9px; }
-  .oc-order-card.revealed .oc-card-center { font-size: 28px; }
-  .oc-order-card.revealed .oc-card-center.joker {
-    padding: 10px 4px;
-    font-size: 9px;
-  }
-  .oc-order-card.revealed .oc-card-effect {
-    bottom: 8px;
-    padding: 1px 3px;
-    font-size: 5.5px;
-  }
-  .oc-order-owner { font-size: 8px; }
 }
 
 </style>
@@ -1218,11 +1153,44 @@ body.game-onecard #chatPane.hidden {
   }
 
   function drawOpeningOrder(ps, seed) {
-    return null;
+    const pool = [];
+    SUITS.forEach((suit) => RANKS.forEach((rank) => pool.push(suit + rank)));
+    const shuffled = Core.shuffle(pool, Core.mulberry32((Number(seed) || 1) ^ 0x51f15e));
+    const draws = ps.map((p, index) => ({
+      playerId: p.id,
+      card: shuffled[index],
+      score: orderCardScore(shuffled[index])
+    })).sort((a, b) => b.score - a.score);
+
+    return {
+      draws,
+      starterId: draws[0]?.playerId || ps[0]?.id || null,
+      at: Core.now(),
+      fromWinner: false
+    };
   }
 
   function startOrderHtml(r) {
-    return '';
+    const data = r.startOrder;
+    if (!data || !Array.isArray(data.draws) || !data.draws.length) return '';
+    if (Core.now() - Number(data.at || 0) > 7000) return '';
+
+    return `<section class="oc-start-order">
+      <div class="oc-start-order-head">
+        <b>${data.fromWinner ? '이전 승자가 선을 잡았습니다' : '첫 판 시작 순서 추첨'}</b>
+        <span>${data.fromWinner ? 'WINNER START' : 'A가 가장 높음'}</span>
+      </div>
+      <div class="oc-start-order-list">
+        ${data.draws.map((item) => {
+          const player = r.players?.[item.playerId];
+          return `<div class="oc-start-order-item ${item.playerId === data.starterId ? 'starter' : ''}">
+            <strong>${Core.esc(player?.name || '참가자')}</strong>
+            <em>${item.card ? Core.esc(cardAria(item.card)) : '승자 선'}</em>
+            <small>${item.playerId === data.starterId ? '첫 차례' : '대기'}</small>
+          </div>`;
+        }).join('')}
+      </div>
+    </section>`;
   }
 
   function buildDeck(seed) {
@@ -1568,10 +1536,9 @@ body.game-onecard #chatPane.hidden {
             const starter = revealed && owner?.id === r.orderStarterId;
 
             if (revealed && owner) {
-              return `<div class="oc-order-card revealed ${starter ? 'starter' : ''}">
-                <div class="oc-order-card-face">${cardHtml(card)}</div>
-                <small class="oc-order-owner">${Core.esc(owner.name)}${starter ? ' · 첫 차례' : ''}</small>
-              </div>`;
+              return `<button type="button" class="oc-order-card revealed ${starter ? 'starter' : ''}" disabled>
+                <span><b>${Core.esc(cardAria(card))}</b><small>${Core.esc(owner.name)}${starter ? ' · 첫 차례' : ''}</small></span>
+              </button>`;
             }
 
             return `<button type="button" class="oc-order-card ${mine ? 'mine' : ''} ${used.has(index) ? 'taken' : ''}"
@@ -2148,7 +2115,7 @@ body.game-onecard #chatPane.hidden {
         <div class="result-podium">
           ${ps.map((p, i) => `<div class="result-row ${p.id === r.winner ? 'win' : ''}">
             <span class="result-rank">${i + 1}</span>
-            <span class="result-name">${Core.esc(p.name)}${p.id === r.winner ? ' · 승리' : ''}</span>
+            <span class="result-name">${Core.esc(p.name)}</span>
             <small>남은 카드 ${(p.hand || []).length}장</small>
           </div>`).join('')}
         </div>
@@ -2195,9 +2162,6 @@ body.game-onecard #chatPane.hidden {
     document.body.dataset.gamePhase = r.phase || 'lobby';
     if (r.phase !== lastPhase) {
       lastPhase = r.phase;
-      if (r.phase === 'over' && r.players?.[r.winner]) {
-        Core.sys(roomId, `게임 종료 — ${r.players[r.winner].name} 님 승리`);
-      }
     }
 
     if (r.phase === 'lobby') renderLobby(r);
