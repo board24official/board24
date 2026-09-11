@@ -4201,6 +4201,21 @@
       if (!cur || cur.id !== botId) return false;
       r.discard = r.discard || [];
       r.deck = r.deck || [];
+      b.hand = b.hand || [];
+
+      // 수지 능력: 손패가 0장이 되는 즉시 카드 1장을 먼저 보충한다.
+      // 능력 처리 후에도 손패가 0장인 일반 봇만 자동으로 턴을 넘긴다.
+      if (r.step === 'play' && b.hand.length === 0) {
+        refillSuzy(r, b);
+        if (b.hand.length === 0) {
+          nextTurn(r);
+          const next = curPlayer(r);
+          botMsg = next
+            ? `<b>${b.name}</b> 님은 손패가 없어 차례를 넘겼습니다 · <b>${next.name}</b> 님의 작업 차례`
+            : `<b>${b.name}</b> 님은 손패가 없어 차례를 넘겼습니다`;
+          return;
+        }
+      }
 
       if (r.step === 'draw') {
         const count = b.character === 'blackjack' ? 2 : 2;
